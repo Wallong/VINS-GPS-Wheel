@@ -27,6 +27,27 @@ class IntegrationBase
         noise.block<3, 3>(15, 15) =  (GYR_W * GYR_W) * Eigen::Matrix3d::Identity();
     }
 
+    // 另写一个带Encoder的构造函数
+    IntegrationBase (const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
+                     const Eigen::Vector3d &_linearized_ba, const Eigen::Vector3d &_linearized_bg,
+                     const double _enc_v_0)
+        : acc_0{_acc_0}, gyr_0{_gyr_0}, linearized_acc{_acc_0}, linearized_gyr{_gyr_0},
+          linearized_ba{_linearized_ba}, linearized_bg{_linearized_bg},
+          enc_v_0{_enc_v_0},
+          jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, covariance{Eigen::Matrix<double, 15, 15>::Zero()},
+          sum_dt{0.0}, delta_p{Eigen::Vector3d::Zero()}, delta_q{Eigen::Quaterniond::Identity()}, delta_v{Eigen::Vector3d::Zero()}
+    {
+        noise_enc = Eigen::Matrix<double, 24, 24>::Zero();
+        noise_enc.block<3, 3>(0, 0) = (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(3, 3) = (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(6, 6) = (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(9, 9) = (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(12, 12) = (ENC_N * ENC_N) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(15, 15) = (ENC_N * ENC_N) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(18, 18) = (ACC_W * ACC_W) * Eigen::Matrix3d::Identity();
+        noise_enc.block<3, 3>(21, 21) = (GYR_W * GYR_W) * Eigen::Matrix3d::Identity(); 
+    }
+
     void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr)
     {
         dt_buf.push_back(dt);
@@ -68,7 +89,13 @@ class IntegrationBase
         result_delta_p = delta_p + delta_v * _dt + 0.5 * un_acc * _dt * _dt;
         result_delta_v = delta_v + un_acc * _dt;
         result_linearized_ba = linearized_ba;
-        result_linearized_bg = linearized_bg;         
+        result_linearized_bg = linearized_bg; 
+        
+        // wallong
+        // Vector3d un_enc_0 = 0.5 * (_enc_left_0 + _enc_right_0);
+        // Vector3d un_enc_1 = 0.5 * (_enc_left_1 + _enc_right_1);
+        // Vector3d un_enc = 0.5 * (un_enc_0 + un_enc_1);
+        // result_delta_eta = delta_eta + delta_q * rio * un_enc * _dt;
 
         if(update_jacobian)
         {
@@ -188,6 +215,7 @@ class IntegrationBase
     double dt;
     Eigen::Vector3d acc_0, gyr_0;
     Eigen::Vector3d acc_1, gyr_1;
+    double enc_v_0, enc_v_1;
 
     const Eigen::Vector3d linearized_acc, linearized_gyr;
     Eigen::Vector3d linearized_ba, linearized_bg;
@@ -196,6 +224,7 @@ class IntegrationBase
     Eigen::Matrix<double, 15, 15> step_jacobian;
     Eigen::Matrix<double, 15, 18> step_V;
     Eigen::Matrix<double, 18, 18> noise;
+    Eigen::Matrix<double, 24, 24> noise_enc;
 
     double sum_dt;
     Eigen::Vector3d delta_p;

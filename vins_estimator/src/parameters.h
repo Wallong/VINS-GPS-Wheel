@@ -20,9 +20,12 @@ extern int ESTIMATE_EXTRINSIC;
 
 extern double ACC_N, ACC_W;
 extern double GYR_N, GYR_W;
+extern double ENC_N; // 轮速计噪声方差
 
 extern std::vector<Eigen::Matrix3d> RIC;
 extern std::vector<Eigen::Vector3d> TIC;
+extern Eigen::Matrix3d RIO; // 轮速计到IMU外参R
+extern Eigen::Vector3d TIO; // 轮速计到IMU外参T
 extern Eigen::Vector3d G;
 
 extern double BIAS_ACC_THRESHOLD;
@@ -32,11 +35,16 @@ extern int NUM_ITERATIONS;
 extern std::string EX_CALIB_RESULT_PATH;
 extern std::string VINS_RESULT_PATH;
 extern std::string IMU_TOPIC;
+extern std::string ENCODER_TOPIC; // 轮速计topic
 extern double TD;
 extern double TR;
 extern int ESTIMATE_TD;
 extern int ROLLING_SHUTTER;
 extern double ROW, COL;
+
+extern double LEFT_D, RIGHT_D; // 左右轮直径
+extern double ENC_RESOLUTION;  // 轮速计分辨率
+extern double BASELINE;        // 两轮间距
 
 
 void readParameters(ros::NodeHandle &n);

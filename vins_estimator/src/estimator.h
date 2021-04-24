@@ -32,6 +32,7 @@ class Estimator
 
     // interface
     void processIMU(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
+    void processIMUEncoder(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity, const double encoder_velocity); // encoder
     void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header);
     void setReloFrame(double _frame_stamp, int _frame_index, vector<Vector3d> &_match_points, Vector3d _relo_t, Matrix3d _relo_r);
 
@@ -70,6 +71,9 @@ class Estimator
 
     Matrix3d ric[NUM_OF_CAM];
     Vector3d tic[NUM_OF_CAM];
+
+    Matrix3d rio; // 
+    Vector3d tio; //
 
     Vector3d Ps[(WINDOW_SIZE + 1)];
     Vector3d Vs[(WINDOW_SIZE + 1)];

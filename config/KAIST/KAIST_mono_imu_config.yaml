@@ -7,6 +7,7 @@ num_of_cam: 1
 
 imu_topic: "/imu/data_raw"
 image_topic: "/stereo/left/image_raw"
+encoder_topic: "encoder/data_raw"
 output_path: "~/output/"
 
 model_type: PINHOLE
@@ -30,7 +31,7 @@ estimate_extrinsic: 1   # 0  Have an accurate extrinsic parameters. We will trus
                         # 1  Have an initial guess about extrinsic parameters. We will optimize around your initial guess.
 
 #Rotation from camera frame to imu frame, imu^R_cam
-extrinsicRotation: !!opencv-matrix
+extrinsicRotation_ic: !!opencv-matrix
    rows: 3
    cols: 3
    dt: d
@@ -38,7 +39,7 @@ extrinsicRotation: !!opencv-matrix
            -0.999977, 0.000334627, -0.00680066,
            -0.000230383, -0.999883, -0.0153234]
 #Translation from camera frame to imu frame, imu^T_cam
-extrinsicTranslation: !!opencv-matrix
+extrinsicTranslation_ic: !!opencv-matrix
    rows: 3
    cols: 1
    dt: d
@@ -85,3 +86,25 @@ rolling_shutter_tr: 0               # unit: s. rolling shutter read out time per
 save_image: 1                   # save image in pose graph for visualization prupose; you can close this function by setting 0 
 visualize_imu_forward: 0        # output imu forward propogation to achieve low latency and high frequence results
 visualize_camera_size: 0.4      # size of camera marker in RVIZ
+
+#wheel encoder
+encode_resolution: 4096         # resolution of encoder
+left_wheel_diameter: 0.623479   # [m]
+right_wheel_diameter: 0.622806  # [m]
+wheel_base: 1.52439             # [m] baseline, length between two wheels
+enc_n: 0.2       # encoder readings noise standard deviation.
+
+#Rotation from encoder frame to imu frame, imu^R_enc
+extrinsicRotation_io: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [1, 0, 0,
+          0, 1, 0,
+          0, 0, 1]
+#Translation from encoder frame to imu frame, imu^T_enc
+extrinsicTranslation_io: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [0.07, 0., -1.7]

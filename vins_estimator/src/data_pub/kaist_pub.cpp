@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Image.h>
+#include <custom_msgs/Encoder.h>
 #include <cv_bridge/cv_bridge.h>
 
 using namespace std;
@@ -56,8 +57,10 @@ int main(int argc, char *argv[])
     ros::NodeHandle nh("~");
     ros::Publisher imu_publisher;
     ros::Publisher img_publisher;
+    ros::Publisher encoder_publisher;
     imu_publisher = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 10, true);
     img_publisher = nh.advertise<sensor_msgs::Image>("/stereo/left/image_raw", 5, true);
+    encoder_publisher = nh.advertise<custom_msgs::Encoder>("/encoder/data_raw", 10, true);
 
         unordered_map<string, string> time_encoder_map;
     string encoder_data_path = sData_path + "/sensor_data/encoder.csv";
@@ -124,6 +127,29 @@ int main(int argc, char *argv[])
             // pSystem->PubImageData(timestamp, gray_img);
         }
 
+        if (sensor_type == "encoder")
+        {
+            if (time_encoder_map.find(time_str) == time_encoder_map.end())
+            {
+                ROS_ERROR("[PublishData]: Failed to find encoder data at time: %s", time_str);
+            }
+            const string& encoder_str = time_encoder_map.at(time_str);
+            stringstream encoder_ss(encoder_str);
+            line_data_vec.clear();
+            while (getline(encoder_ss, value_str, ','))
+            {
+                line_data_vec.push_back(value_str);
+            }
+            
+            custom_msgs::Encoder encoder_msg;
+            ros::Time stamp(timestamp);
+            encoder_msg.header.stamp = stamp;
+            encoder_msg.header.frame_id = "encoder_frame";
+            encoder_msg.left_encoder = std::stoi(line_data_vec[1]);
+            encoder_msg.right_encoder = std::stoi(line_data_vec[2]);
+            encoder_publisher.publish(encoder_msg);
+        }
+
         if (sensor_type == "imu")
         {
             if (time_imu_map.find(time_str) == time_imu_map.end())
@@ -139,16 +165,7 @@ int main(int argc, char *argv[])
                 line_data_vec.push_back(value_str);
             }
 
-            Vector3d vAcc, vGyr;
-            vGyr.x() = std::stod(line_data_vec[8]);
-            vGyr.y() = std::stod(line_data_vec[9]);
-            vGyr.z() = std::stod(line_data_vec[10]);
-            vAcc.x() = std::stod(line_data_vec[11]);
-            vAcc.y() = std::stod(line_data_vec[12]);
-            vAcc.z() = std::stod(line_data_vec[13]);
-
             sensor_msgs::Imu imu_msg;
-            // pSystem->PubImuData(timestamp, vGyr, vAcc);
             ros::Time stamp(timestamp);
             imu_msg.header.stamp = stamp;
             imu_msg.header.frame_id = "imu_frame";
@@ -166,7 +183,7 @@ int main(int argc, char *argv[])
             imu_msg.linear_acceleration.y = std::stod(line_data_vec[12]);
             imu_msg.linear_acceleration.z = std::stod(line_data_vec[13]);
             imu_publisher.publish(imu_msg);
-            usleep(5000*nDelayTimes); // usleep 1e-6, 5000*2 = 10000为10ms, 100hz
+            usleep(3000*nDelayTimes); // usleep 1e-6, 5000*2 = 10000为10ms, 100hz
         }
     }
     ros::spinOnce();

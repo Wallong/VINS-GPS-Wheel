@@ -4,9 +4,12 @@ double INIT_DEPTH;
 double MIN_PARALLAX;
 double ACC_N, ACC_W;
 double GYR_N, GYR_W;
+double ENC_N; // 轮速计噪声方差
 
 std::vector<Eigen::Matrix3d> RIC;
 std::vector<Eigen::Vector3d> TIC;
+Eigen::Matrix3d RIO; // 轮速计到IMU外参R
+Eigen::Vector3d TIO; // 轮速计到IMU外参T
 
 Eigen::Vector3d G{0.0, 0.0, 9.8};
 
@@ -20,8 +23,13 @@ int ROLLING_SHUTTER;
 std::string EX_CALIB_RESULT_PATH;
 std::string VINS_RESULT_PATH;
 std::string IMU_TOPIC;
+std::string ENCODER_TOPIC; // 轮速计topic
 double ROW, COL;
 double TD, TR;
+
+double LEFT_D, RIGHT_D; // 左右轮直径
+double ENC_RESOLUTION;  // 轮速计分辨率
+double BASELINE;        // 两轮间距
 
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)
@@ -50,6 +58,7 @@ void readParameters(ros::NodeHandle &n)
     }
 
     fsSettings["imu_topic"] >> IMU_TOPIC;
+    fsSettings["encoder_topic"] >> ENCODER_TOPIC; // 轮速计topic
 
     SOLVER_TIME = fsSettings["max_solver_time"];
     NUM_ITERATIONS = fsSettings["max_num_iterations"];
@@ -72,8 +81,13 @@ void readParameters(ros::NodeHandle &n)
     GYR_N = fsSettings["gyr_n"];
     GYR_W = fsSettings["gyr_w"];
     G.z() = fsSettings["g_norm"];
+    ENC_N = fsSettings["enc_n"]; // 轮速计噪声方差
     ROW = fsSettings["image_height"];
     COL = fsSettings["image_width"];
+    ENC_RESOLUTION = fsSettings["encode_resolution"]; // 轮速计
+    LEFT_D = fsSettings["left_wheel_diameter"];       // 轮速计
+    RIGHT_D = fsSettings["right_wheel_diameter"];     // 轮速计
+    BASELINE = fsSettings["baseline"];                // 轮速计
     ROS_INFO("ROW: %f COL: %f ", ROW, COL);
 
     ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];
@@ -96,8 +110,8 @@ void readParameters(ros::NodeHandle &n)
             ROS_WARN(" fix extrinsic param ");
 
         cv::Mat cv_R, cv_T;
-        fsSettings["extrinsicRotation"] >> cv_R;
-        fsSettings["extrinsicTranslation"] >> cv_T;
+        fsSettings["extrinsicRotation_ic"] >> cv_R;
+        fsSettings["extrinsicTranslation_ic"] >> cv_T;
         Eigen::Matrix3d eigen_R;
         Eigen::Vector3d eigen_T;
         cv::cv2eigen(cv_R, eigen_R);
@@ -106,8 +120,20 @@ void readParameters(ros::NodeHandle &n)
         eigen_R = Q.normalized();
         RIC.push_back(eigen_R);
         TIC.push_back(eigen_T);
-        ROS_INFO_STREAM("Extrinsic_R : " << std::endl << RIC[0]);
-        ROS_INFO_STREAM("Extrinsic_T : " << std::endl << TIC[0].transpose());
+        ROS_INFO_STREAM("Extrinsic_Ric : " << std::endl << RIC[0]);
+        ROS_INFO_STREAM("Extrinsic_Tic : " << std::endl << TIC[0].transpose());
+
+        // 读取Rio和Tio
+        fsSettings["extrinsicRotation_io"] >> cv_R;
+        fsSettings["extrinsicTranslation_io"] >> cv_T;
+        cv::cv2eigen(cv_R, eigen_R);
+        cv::cv2eigen(cv_T, eigen_T);
+        Eigen::Quaterniond Qio(eigen_R);
+        eigen_R = Qio.normalized();
+        RIO = eigen_R;
+        TIO = eigen_T;
+        ROS_INFO_STREAM("Extrinsic_Rio : " << std::endl << RIO);
+        ROS_INFO_STREAM("Extrinsic_Tic : " << std::endl << TIO.transpose());
         
     } 
 
