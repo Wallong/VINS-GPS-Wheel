@@ -42,9 +42,10 @@ extern int ESTIMATE_TD;
 extern int ROLLING_SHUTTER;
 extern double ROW, COL;
 
+extern int ENCODER; // 是否融合轮速计
 extern double LEFT_D, RIGHT_D; // 左右轮直径
 extern double ENC_RESOLUTION;  // 轮速计分辨率
-extern double BASELINE;        // 两轮间距
+extern double WHEELBASE;        // 两轮间距
 
 
 void readParameters(ros::NodeHandle &n);

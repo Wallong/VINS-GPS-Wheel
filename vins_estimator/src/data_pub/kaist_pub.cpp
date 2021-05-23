@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
             imu_msg.linear_acceleration.y = std::stod(line_data_vec[12]);
             imu_msg.linear_acceleration.z = std::stod(line_data_vec[13]);
             imu_publisher.publish(imu_msg);
-            usleep(3000*nDelayTimes); // usleep 1e-6, 5000*2 = 10000为10ms, 100hz
+            usleep(10000*nDelayTimes); // usleep 1e-6, 5000*2 = 10000为10ms, 100hz
         }
     }
     ros::spinOnce();

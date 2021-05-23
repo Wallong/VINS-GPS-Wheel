@@ -7,7 +7,7 @@ num_of_cam: 1
 
 imu_topic: "/imu/data_raw"
 image_topic: "/stereo/left/image_raw"
-encoder_topic: "encoder/data_raw"
+encoder_topic: "/encoder/data_raw"
 output_path: "~/output/"
 
 model_type: PINHOLE
@@ -57,9 +57,9 @@ show_track: 1           # publish tracking image as topic
 flow_back: 1            # perform forward and backward optical flow to improve feature tracking accuracy
 
 #optimization parameters
-max_solver_time: 0.04  # max solver itration time (ms), to guarantee real time
-max_num_iterations: 8   # max solver itrations, to guarantee real time
-keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
+max_solver_time: 0.2  # max solver itration time (ms), to guarantee real time
+max_num_iterations: 20   # max solver itrations, to guarantee real time
+keyframe_parallax: 5.0 # keyframe selection threshold (pixel)
 
 #imu parameters       The more accurate parameters you provide, the better performance
 acc_n: 0.1          # accelerometer measurement noise standard deviation. 
@@ -75,7 +75,7 @@ td: 0.0                             # initial value of time offset. unit: s. rea
 #loop closure parameters
 loop_closure: 1                    # start loop closure
 load_previous_pose_graph: 0        # load and reuse previous pose graph; load from 'pose_graph_save_path'
-fast_relocalization: 0             # useful in real-time and large project
+fast_relocalization: 1             # useful in real-time and large project
 pose_graph_save_path: "/home/xiaoqiang/output/pose_graph/" # save and load path
 
 #rolling shutter parameters
@@ -88,10 +88,11 @@ visualize_imu_forward: 0        # output imu forward propogation to achieve low 
 visualize_camera_size: 0.4      # size of camera marker in RVIZ
 
 #wheel encoder
+is_encoder: 1 # is encoder
 encode_resolution: 4096         # resolution of encoder
 left_wheel_diameter: 0.623479   # [m]
 right_wheel_diameter: 0.622806  # [m]
-wheel_base: 1.52439             # [m] baseline, length between two wheels
+wheelbase: 1.52439             # [m] wheelbase, length between two wheels
 enc_n: 0.2       # encoder readings noise standard deviation.
 
 #Rotation from encoder frame to imu frame, imu^R_enc
@@ -107,4 +108,4 @@ extrinsicTranslation_io: !!opencv-matrix
    rows: 3
    cols: 1
    dt: d
-   data: [0.07, 0., -1.7]
+   data: [0.07, 0., -1.7]   # [0.07, 0., -1.7]

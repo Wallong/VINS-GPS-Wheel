@@ -27,9 +27,10 @@ std::string ENCODER_TOPIC; // 轮速计topic
 double ROW, COL;
 double TD, TR;
 
+int ENCODER; // 是否融合轮速计
 double LEFT_D, RIGHT_D; // 左右轮直径
 double ENC_RESOLUTION;  // 轮速计分辨率
-double BASELINE;        // 两轮间距
+double WHEELBASE;        // 两轮间距
 
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)
@@ -84,10 +85,11 @@ void readParameters(ros::NodeHandle &n)
     ENC_N = fsSettings["enc_n"]; // 轮速计噪声方差
     ROW = fsSettings["image_height"];
     COL = fsSettings["image_width"];
+    ENCODER = fsSettings["is_encoder"]; // 轮速计
     ENC_RESOLUTION = fsSettings["encode_resolution"]; // 轮速计
     LEFT_D = fsSettings["left_wheel_diameter"];       // 轮速计
     RIGHT_D = fsSettings["right_wheel_diameter"];     // 轮速计
-    BASELINE = fsSettings["baseline"];                // 轮速计
+    WHEELBASE = fsSettings["wheelbase"];                // 轮速计
     ROS_INFO("ROW: %f COL: %f ", ROW, COL);
 
     ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];

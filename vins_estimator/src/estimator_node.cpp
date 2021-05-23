@@ -21,7 +21,7 @@ Estimator estimator;
 std::condition_variable con;
 double current_time = -1;
 queue<sensor_msgs::ImuConstPtr> imu_buf;
-queue<custom_msgs::EncoderConstPtr> encoder_buf; // wallong
+deque<custom_msgs::EncoderConstPtr> encoder_buf; // wallong
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
 queue<sensor_msgs::PointCloudConstPtr> relo_buf;
 int sum_of_wait = 0;
@@ -151,18 +151,39 @@ getMeasurements()
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
+
+        // encoder
+        // 1、进行一次判断，要比早于图像帧的IMU数据还要早一帧
+        std::vector<custom_msgs::EncoderConstPtr> encoders;
+        if (IMUs.size() > 1)
+        {
+            while (encoder_buf.front()->header.stamp.toSec() < IMUs[IMUs.size()-2]->header.stamp.toSec())
+            {
+                encoders.emplace_back(encoder_buf.front());
+                encoder_buf.pop_front();
+            }
+        }
+
+        // 2、多添加一帧IMU数据
         IMUs.emplace_back(imu_buf.front());
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
-
-        // encoder
-        std::vector<custom_msgs::EncoderConstPtr> encoders;
-        while (encoder_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec())
+        
+        // 3、和多一帧的IMU数据进行比较，因为queue不能遍历，所以换deque
+        for (auto iter = encoder_buf.begin(); iter != encoder_buf.end(); iter++)
         {
-            encoders.emplace_back(encoder_buf.front());
-            encoder_buf.pop();
+            if ((*iter)->header.stamp.toSec() < IMUs.back()->header.stamp.toSec())
+            {
+                encoders.emplace_back(*iter);
+            }
+            else
+            {
+                encoders.emplace_back(*iter);
+                break;
+            }
         }
-        encoders.emplace_back(encoder_buf.front());
+        // 4、比IMU数据要多一帧，用来时间戳差分计算
+        // encoders.emplace_back(encoder_buf.front());
         if (encoders.empty())
             ROS_WARN("no encoder between two image.");
         measurements.emplace_back(IMUs, img_msg, encoders);
@@ -206,7 +227,7 @@ void encoder_callback(const custom_msgs::EncoderConstPtr &encoder_msg)
     last_encoder_t = encoder_msg->header.stamp.toSec();
 
     e_buf.lock();
-    encoder_buf.push(encoder_msg);
+    encoder_buf.push_back(encoder_msg);
     e_buf.unlock();
     con.notify_one();
 
@@ -276,22 +297,31 @@ void process()
         for (auto &measurement : measurements)
         {
             auto img_msg = std::get<1>(measurement);
-            double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
+            double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0, vx = 0, vy = 0, vz = 0;
 
             // 做速度计算和时间戳对齐
             auto encoder_measurement = std::get<2>(measurement);
             // 这里为什么用速度而不用位移，单用里程计可以用位移，和IMU融合需要先对齐时间
-            std::vector<std::pair<double, double>> encoder_velocities;
+            std::vector<std::pair<double, Eigen::Vector3d>> encoder_velocities;
             for (size_t i = 1; i < std::get<2>(measurement).size(); i++)
             {
                 auto begin_encoder_msg = std::get<2>(measurement)[i-1];
                 auto end_encoder_msg = std::get<2>(measurement)[i];
-                double enc_vel_left = (end_encoder_msg->left_encoder - begin_encoder_msg->left_encoder) / ENC_RESOLUTION * M_PI * LEFT_D;
-                double enc_vel_right = (end_encoder_msg->right_encoder - begin_encoder_msg->right_encoder) / ENC_RESOLUTION * M_PI * RIGHT_D;
-                double enc_vel = 0.5 * (enc_vel_left + enc_vel_right);
+                double dt = end_encoder_msg->header.stamp.toSec() - begin_encoder_msg->header.stamp.toSec();
+                double enc_vel_left = (double)(end_encoder_msg->left_encoder - begin_encoder_msg->left_encoder) / ENC_RESOLUTION * M_PI * LEFT_D / dt;
+                double enc_vel_right = (double)(end_encoder_msg->right_encoder - begin_encoder_msg->right_encoder) / ENC_RESOLUTION * M_PI * RIGHT_D / dt;
+                double enc_v = 0.5 * (enc_vel_left + enc_vel_right);
+                double enc_omega = (enc_vel_right - enc_vel_left) / WHEELBASE; 
+                // Eigen::Quaterniond tmp_q(1, 0, 0, 0.5 * enc_omega * dt);
+                Eigen::Vector3d tmp_enc_vel(enc_v, 0, 0);
+                Eigen::AngleAxisd tmp_rot_vec(enc_omega * dt, Eigen::Vector3d::UnitY());
+                // Eigen::Vector3d enc_vel(tmp_rot_vec * tmp_enc_vel);  // 旋转
+                Eigen::Vector3d enc_vel(tmp_enc_vel);  // 不旋转
                 double timestamp = 0.5 * (begin_encoder_msg->header.stamp.toSec() + end_encoder_msg->header.stamp.toSec());
                 encoder_velocities.emplace_back(timestamp, enc_vel);
             } 
+            // ROS_INFO("Size of imu_msgs: %d, size of encoder_msgs: %d, size of encoder velocities: %d",
+            //     std::get<0>(measurement).size(), std::get<2>(measurement).size(), encoder_velocities.size());
 
             for (auto &imu_msg : std::get<0>(measurement))
             {
@@ -299,7 +329,7 @@ void process()
 
                 double t_1 = 0, t_2 = 0;
                 
-                double encoder_velocity;
+                Eigen::Vector3d encoder_velocity;
                 // 这个速度先定为第一帧速度，或者滑窗最新速度
                 if (!encoder_velocities.empty())
                 {
@@ -307,24 +337,36 @@ void process()
                 }
                 else
                 {
-                    encoder_velocity = estimator.Vs[WINDOW_SIZE].norm();
+                    encoder_velocity = estimator.Vs[WINDOW_SIZE];
                 }
 
-                std::pair<double, double> enc_vel_0, enc_vel_1;
+                // Encoder时间戳对齐到imu
+                std::pair<double, Eigen::Vector3d> enc_vel_0, enc_vel_1;
+
+                // int i = 0;
+                // if (i == 0)
+                // {
+                //     ROS_INFO_STREAM("enc_vel_1: (%f, %f, %f)" << enc_vel_1.second.transpose());
+                // }
                 for (auto &enc_vel : encoder_velocities)
                 {
+                    // 寻找最近的小于imu消息时间的encoder消息
                     if (enc_vel.first <= t)
                     {
                         t_1 = enc_vel.first;
                         enc_vel_0 = enc_vel;
+                        // ROS_INFO("i = %d", i++);
                     }
                     else
                     {
                         t_2 = enc_vel.first;
                         enc_vel_1 = enc_vel;
+                        // ROS_INFO("i = %d, break", i++);
                         break;
                     }
                 }
+
+
                 if (t_1 > 0 && t_2 > 0)
                 {
                 
@@ -352,8 +394,13 @@ void process()
                     rx = imu_msg->angular_velocity.x;
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
-                    estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
-                    //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
+                    vx = encoder_velocity.x();
+                    vy = encoder_velocity.y();
+                    vz = encoder_velocity.z();
+                    // estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
+                    // estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), Vector3d(vx, vy, vz));
+                    estimator.processIMUEncoder(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), Vector3d(vx, vy, vz));
+                    // printf("dimu: dt:%f a: %f %f %f w: %f %f %f v: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz, vx, vy, vz);
 
                 }
                 else
@@ -372,9 +419,13 @@ void process()
                     rx = w1 * rx + w2 * imu_msg->angular_velocity.x;
                     ry = w1 * ry + w2 * imu_msg->angular_velocity.y;
                     rz = w1 * rz + w2 * imu_msg->angular_velocity.z;
+                    vx = w1 * vx + w2 * encoder_velocity.x();
+                    vy = w1 * vy + w2 * encoder_velocity.y();
+                    vz = w1 * vz + w2 * encoder_velocity.z();
                     // estimator.processIMU(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
-                    estimator.processIMUEncoder(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), encoder_velocity);
-                    printf("dimu: dt:%f a: %f %f %f w: %f %f %f v: %f\n",dt_1, dx, dy, dz, rx, ry, rz, encoder_velocity);
+                    // estimator.processIMU(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), Vector3d(vx, vy, vz));
+                    estimator.processIMUEncoder(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), Vector3d(vx, vy, vz));
+                    printf("dimu: dt:%f a: %f %f %f w: %f %f %f v: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz, vx, vy, vz);
                 }
             }
             encoder_velocities.clear(); // 清空内存
@@ -443,6 +494,7 @@ void process()
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
 
             TicToc t_s;
+            // map<feature_id, []<camera_id, xyz_uv_velocity>>
             map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> image;
             for (unsigned int i = 0; i < img_msg->points.size(); i++)
             {

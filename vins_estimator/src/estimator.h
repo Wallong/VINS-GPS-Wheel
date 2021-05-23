@@ -13,6 +13,7 @@
 
 #include <ceres/ceres.h>
 #include "factor/imu_factor.h"
+#include "factor/imu_encoder_factor.h"
 #include "factor/pose_local_parameterization.h"
 #include "factor/projection_factor.h"
 #include "factor/projection_td_factor.h"
@@ -32,7 +33,8 @@ class Estimator
 
     // interface
     void processIMU(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
-    void processIMUEncoder(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity, const double encoder_velocity); // encoder
+    void processIMU(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity, const Vector3d &encoder_velocity);
+    void processIMUEncoder(double t, const Vector3d &linear_acceleration, const Vector3d &angular_velocity, const Vector3d &encoder_velocity); // encoder
     void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header);
     void setReloFrame(double _frame_stamp, int _frame_index, vector<Vector3d> &_match_points, Vector3d _relo_t, Matrix3d _relo_r);
 
@@ -81,6 +83,9 @@ class Estimator
     Vector3d Bas[(WINDOW_SIZE + 1)];
     Vector3d Bgs[(WINDOW_SIZE + 1)];
     double td;
+    Vector3d Po;
+    Vector3d Vo;
+    Matrix3d Ro;
 
     Matrix3d back_R0, last_R, last_R0;
     Vector3d back_P0, last_P, last_P0;
@@ -88,10 +93,12 @@ class Estimator
 
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];
     Vector3d acc_0, gyr_0;
+    Vector3d enc_v_0; // encoder
 
     vector<double> dt_buf[(WINDOW_SIZE + 1)];
     vector<Vector3d> linear_acceleration_buf[(WINDOW_SIZE + 1)];
     vector<Vector3d> angular_velocity_buf[(WINDOW_SIZE + 1)];
+    vector<Vector3d> encoder_velocity_buf[(WINDOW_SIZE + 1)];
 
     int frame_count;
     int sum_of_outlier, sum_of_back, sum_of_front, sum_of_invalid;
@@ -114,6 +121,7 @@ class Estimator
     double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];
     double para_Feature[NUM_OF_F][SIZE_FEATURE];
     double para_Ex_Pose[NUM_OF_CAM][SIZE_POSE];
+    double para_Ex_Pose_enc[1][SIZE_POSE]; // encoder
     double para_Retrive_Pose[SIZE_POSE];
     double para_Td[1][1];
     double para_Tr[1][1];
