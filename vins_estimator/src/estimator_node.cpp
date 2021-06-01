@@ -301,7 +301,6 @@ void process()
 
             // 做速度计算和时间戳对齐
             auto encoder_measurement = std::get<2>(measurement);
-            // 这里为什么用速度而不用位移，单用里程计可以用位移，和IMU融合需要先对齐时间
             std::vector<std::pair<double, Eigen::Vector3d>> encoder_velocities;
             for (size_t i = 1; i < std::get<2>(measurement).size(); i++)
             {
@@ -430,40 +429,6 @@ void process()
             }
             encoder_velocities.clear(); // 清空内存
 
-            // // encoder
-            // double encl = 0, encr = 0; // 为了插值计算
-            // for (auto &encoder_msg : std::get<2>measurement)
-            // {
-            //     double encoder_t = encoder_msg->header.stamp.toSec();
-            //     double img_t = img_msg->header.stamp.toSec() + estimator.td;
-            //     if (encoder_t <= img_t)
-            //     {
-            //         if (current_time < 0)
-            //             current_time = encoder_t;
-            //         double dt = encoder_t - current_time;
-            //         ROS_ASSERT(dt >= 0);
-            //         current_time = encoder_t;
-            //         encl = (double)encoder_msg->left_encoder;
-            //         encr = (double)encoder_msg->right_encoder;
-            //         estimator.processEncoder(dt, encl, encr);
-            //     }
-            //     else
-            //     {
-            //         // 插值计算
-            //         double dt_1 = img_t - current_time;
-            //         double dt_2 = encoder_t - img_t;
-            //         current_time = img_t;
-            //         ROS_ASSERT(dt_1 >= 0);
-            //         ROS_ASSERT(dt_2 >= 0);
-            //         ROS_ASSERT(dt_1 + dt_2 > 0);
-            //         double w1 = dt_2 / (dt_1 + dt_2);
-            //         double w2 = dt_2 / (dt_1 + dt_2);
-            //         encl = w1 * encl + w2 * (double)encoder_msg->left_encoder;
-            //         encr = w1 * encr + w2 * (double)encoder_msg->right_encoder;
-            //         estimator.processEncoder(dt_1, encl, encr);
-            //     }
-            // }
-
             // set relocalization frame
             sensor_msgs::PointCloudConstPtr relo_msg = NULL;
             while (!relo_buf.empty())
@@ -517,9 +482,9 @@ void process()
 
             double whole_t = t_s.toc();
             printStatistics(estimator, whole_t);
+
             std_msgs::Header header = img_msg->header;
             header.frame_id = "world";
-
             pubOdometry(estimator, header);
             pubKeyPoses(estimator, header);
             pubCameraPose(estimator, header);
@@ -528,8 +493,9 @@ void process()
             pubKeyframe(estimator);
             if (relo_msg != NULL)
                 pubRelocalization(estimator);
-            //ROS_ERROR("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
+            ROS_INFO("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
         }
+
         m_estimator.unlock();
         m_buf.lock();
         m_state.lock();
