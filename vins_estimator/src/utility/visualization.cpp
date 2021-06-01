@@ -3,13 +3,13 @@
 using namespace ros;
 using namespace Eigen;
 ros::Publisher pub_odometry, pub_latest_odometry;
-ros::Publisher pub_path, pub_relo_path;
+ros::Publisher pub_path, pub_relo_path, pub_odom_path; // odometry path
 ros::Publisher pub_point_cloud, pub_margin_cloud;
 ros::Publisher pub_key_poses;
 ros::Publisher pub_relo_relative_pose;
 ros::Publisher pub_camera_pose;
 ros::Publisher pub_camera_pose_visual;
-nav_msgs::Path path, relo_path;
+nav_msgs::Path path, relo_path, odom_path; // odometry path
 
 ros::Publisher pub_keyframe_pose;
 ros::Publisher pub_keyframe_point;
@@ -24,6 +24,7 @@ void registerPub(ros::NodeHandle &n)
 {
     pub_latest_odometry = n.advertise<nav_msgs::Odometry>("imu_propagate", 1000);
     pub_path = n.advertise<nav_msgs::Path>("path", 1000);
+    pub_odom_path = n.advertise<nav_msgs::Path>("odom_path", 1000);
     pub_relo_path = n.advertise<nav_msgs::Path>("relocalization_path", 1000);
     pub_odometry = n.advertise<nav_msgs::Odometry>("odometry", 1000);
     pub_point_cloud = n.advertise<sensor_msgs::PointCloud>("point_cloud", 1000);
@@ -66,7 +67,11 @@ void printStatistics(const Estimator &estimator, double t)
 {
     if (estimator.solver_flag != Estimator::SolverFlag::NON_LINEAR)
         return;
-    printf("position: %f, %f, %f\r", estimator.Ps[WINDOW_SIZE].x(), estimator.Ps[WINDOW_SIZE].y(), estimator.Ps[WINDOW_SIZE].z());
+    printf("position: %f, %f, %f, velocity: %f, %f, %f, velocity norm: %f\r.",
+        estimator.Ps[WINDOW_SIZE].x(), estimator.Ps[WINDOW_SIZE].y(), estimator.Ps[WINDOW_SIZE].z(),
+        estimator.Vs[WINDOW_SIZE].x(), estimator.Vs[WINDOW_SIZE].y(), estimator.Vs[WINDOW_SIZE].z(),
+        estimator.Vs[WINDOW_SIZE].norm());
+    ROS_INFO_STREAM("orientation: " << estimator.Rs[WINDOW_SIZE]);
     ROS_DEBUG_STREAM("position: " << estimator.Ps[WINDOW_SIZE].transpose());
     ROS_DEBUG_STREAM("orientation: " << estimator.Vs[WINDOW_SIZE].transpose());
     for (int i = 0; i < NUM_OF_CAM; i++)
@@ -133,6 +138,30 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
         path.header.frame_id = "world";
         path.poses.push_back(pose_stamped);
         pub_path.publish(path);
+
+        // 里程计
+        nav_msgs::Odometry odometry_wheel;
+        odometry_wheel.header = header;
+        odometry_wheel.header.frame_id = "world";
+        odometry_wheel.child_frame_id = "world";
+        odometry_wheel.pose.pose.position.x = estimator.Po.x();
+        odometry_wheel.pose.pose.position.y = estimator.Po.y();
+        odometry_wheel.pose.pose.position.z = estimator.Po.z();
+        odometry_wheel.pose.pose.orientation.x = 0.0;
+        odometry_wheel.pose.pose.orientation.y = 0.0;
+        odometry_wheel.pose.pose.orientation.z = 0.0;
+        odometry_wheel.pose.pose.orientation.w = 1.0;
+        odometry_wheel.twist.twist.linear.x = estimator.Vo.x();
+        odometry_wheel.twist.twist.linear.y = estimator.Vo.y();
+        odometry_wheel.twist.twist.linear.z = estimator.Vo.z();
+        geometry_msgs::PoseStamped pose_stamped_wheel;
+        pose_stamped_wheel.header = header;
+        pose_stamped_wheel.header.frame_id = "world";
+        pose_stamped_wheel.pose = odometry_wheel.pose.pose;
+        odom_path.header = header;
+        odom_path.header.frame_id = "world";
+        odom_path.poses.push_back(pose_stamped_wheel);
+        pub_odom_path.publish(odom_path);
 
         Vector3d correct_t;
         Vector3d correct_v;

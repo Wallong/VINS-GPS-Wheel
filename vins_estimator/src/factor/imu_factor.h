@@ -60,6 +60,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
         Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
         residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
                                             Pj, Qj, Vj, Baj, Bgj);
+        ROS_INFO_STREAM("Residual of imu encoder factor: " << residual);
 
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
         //sqrt_info.setIdentity();

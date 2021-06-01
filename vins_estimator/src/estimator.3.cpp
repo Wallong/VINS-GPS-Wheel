@@ -25,11 +25,6 @@ void Estimator::setParameter()
 
 void Estimator::clearState()
 {
-    // 里程计相关
-    Ro.setIdentity();
-    Po.setZero();
-    Vo.setZero();
-
     for (int i = 0; i < WINDOW_SIZE + 1; i++)
     {
         Rs[i].setIdentity();
@@ -127,47 +122,6 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
 }
-void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity, const Vector3d &encoder_velocity)
-{
-    if (!first_imu)
-    {
-        first_imu = true;
-        acc_0 = linear_acceleration;
-        gyr_0 = angular_velocity;
-    }
-
-    if (!pre_integrations[frame_count])
-    {
-        pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
-    }
-    if (frame_count != 0)
-    {
-        pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
-        //if(solver_flag != NON_LINEAR)
-            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
-
-        dt_buf[frame_count].push_back(dt);
-        linear_acceleration_buf[frame_count].push_back(linear_acceleration);
-        angular_velocity_buf[frame_count].push_back(angular_velocity);
-        encoder_velocity_buf[frame_count].push_back(Eigen::Vector3d(0, 0, 0));
-
-        int j = frame_count;         
-        Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
-        Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
-        Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
-        Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
-        Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
-        Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
-        Vs[j] += dt * un_acc;
-
-        // 添加里程计的Po，Ro
-        Ro = Rs[j];
-        Vo = Ro * encoder_velocity;
-        Po += dt * Vo;
-    }
-    acc_0 = linear_acceleration;
-    gyr_0 = angular_velocity;
-}
 
 void Estimator::processIMUEncoder(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity, const Vector3d &encoder_velocity)
 {
@@ -181,13 +135,13 @@ void Estimator::processIMUEncoder(double dt, const Vector3d &linear_acceleration
 
     if (!pre_integrations[frame_count])
     {
-        pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count], enc_v_0};
+        pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count], Rs[frame_count] * enc_v_0};
     }
     if (frame_count != 0)
     {
-        pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity, encoder_velocity);
+        pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity, Rs[frame_count] * encoder_velocity);
         //if(solver_flag != NON_LINEAR)
-            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity, encoder_velocity);
+            tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity, Rs[frame_count] * encoder_velocity);
 
         dt_buf[frame_count].push_back(dt);
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
@@ -202,10 +156,6 @@ void Estimator::processIMUEncoder(double dt, const Vector3d &linear_acceleration
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
         Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
         Vs[j] += dt * un_acc;
-
-        // 添加里程计的Po，Ro
-        Vo = encoder_velocity;
-        Po += dt * Vo;
     }
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
@@ -231,7 +181,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header.stamp.toSec(), imageframe));
     // tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
-    tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count], enc_v_0};
+    tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count], Rs[frame_count] * enc_v_0};
 
     // 这里如果没有外参数，先估计一个外参数，在这里我们始终提供外参数
     if(ESTIMATE_EXTRINSIC == 2)
@@ -501,8 +451,26 @@ bool Estimator::visualInitialAlign()
     {
         pre_integrations[i]->repropagate(Vector3d::Zero(), Bgs[i]);
     }
-
+    /**encoder*/
+    // 根据轮速计的预积分求s
+    // double sum_s = 0;
+    // for (int i = frame_count; i >= 1; i--)
+    // {
+    //     double s = 0;
+    //     Eigen::Vector3d delta_eta = all_image_frame[Headers[i].stamp.toSec()].pre_integration->delta_eta;
+    //     ROS_INFO_STREAM("Delta eta = " << delta_eta.transpose());
+    //     Eigen::Quaterniond delta_q = all_image_frame[Headers[i].stamp.toSec()].pre_integration->delta_q;
+    //     ROS_INFO_STREAM("Delta q = " << delta_q.coeffs().transpose());
+    //     Eigen::Vector3d tmp_b = delta_eta + TIO - delta_q * TIO + Rs[i] * TIC[0] - Rs[i-1] * TIC[0];
+    //     ROS_INFO_STREAM("Delta tmp_b = " << tmp_b.transpose());
+    //     Eigen::Vector3d tmp_A = Ps[i] - Ps[i-1];
+    //     ROS_INFO_STREAM("Delta tmp_A = " << tmp_A.transpose());
+    //     s = tmp_b.x() / tmp_A.x(); // 考虑车的特性
+    //     sum_s += s; 
+    // }
+    // double s = sum_s / frame_count;
     ROS_INFO("Real scale = %f", s);
+    /*encoder**/
 
     for (int i = frame_count; i >= 0; i--)
         Ps[i] = s * Ps[i] - Rs[i] * TIC[0] - (s * Ps[0] - Rs[0] * TIC[0]);
@@ -1157,7 +1125,7 @@ void Estimator::slideWindow()
 
             delete pre_integrations[WINDOW_SIZE];
             // pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
-            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], enc_v_0};
+            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], Rs[WINDOW_SIZE] * enc_v_0};
 
             dt_buf[WINDOW_SIZE].clear();
             linear_acceleration_buf[WINDOW_SIZE].clear();
@@ -1197,7 +1165,7 @@ void Estimator::slideWindow()
                 Vector3d tmp_encoder_velocity = encoder_velocity_buf[frame_count][i];
 
                 // pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity);
-                pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity, tmp_encoder_velocity);
+                pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity, Rs[frame_count - 1] * tmp_encoder_velocity);
 
                 dt_buf[frame_count - 1].push_back(tmp_dt);
                 linear_acceleration_buf[frame_count - 1].push_back(tmp_linear_acceleration);
@@ -1214,7 +1182,7 @@ void Estimator::slideWindow()
 
             delete pre_integrations[WINDOW_SIZE];
             // pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
-            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], enc_v_0};
+            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], Rs[WINDOW_SIZE] * enc_v_0};
 
             dt_buf[WINDOW_SIZE].clear();
             linear_acceleration_buf[WINDOW_SIZE].clear();

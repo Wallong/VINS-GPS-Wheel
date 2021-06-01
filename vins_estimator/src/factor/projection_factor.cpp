@@ -11,7 +11,7 @@ ProjectionFactor::ProjectionFactor(const Eigen::Vector3d &_pts_i, const Eigen::V
     Eigen::Vector3d tmp(0, 0, 1);
     if(a == tmp)
         tmp << 1, 0, 0;
-    b1 = (tmp - a * (a.transpose() * tmp)).normalized();
+    b1 = (tmp - a * (a.transpose() * tmp)).normalized(); //施密特正交化
     b2 = a.cross(b1);
     tangent_base.block<1, 3>(0, 0) = b1.transpose();
     tangent_base.block<1, 3>(1, 0) = b2.transpose();
