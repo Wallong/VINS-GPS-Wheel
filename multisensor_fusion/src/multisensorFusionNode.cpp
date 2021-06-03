@@ -31,8 +31,8 @@ int main(int argc, char *argv[])
 
     globalPath = &multisensorOptimization.globalPath;
 
-    ros::Subscriber sub_GPS = nh.subscribe("/gps/data_raw", 1000, GPS_callback);
-    ros::Subscriber sub_vio = nh.subscribe("/vins_estimator/odometry", 1000, vio_callback);
+    ros::Subscriber sub_GPS = nh.subscribe("/gps/data_raw", 100, GPS_callback);
+    ros::Subscriber sub_vio = nh.subscribe("/vins_estimator/odometry", 100, vio_callback);
 
     globalPathPub = nh.advertise<nav_msgs::Path>("global_path", 100);
     globalOdomPub = nh.advertise<nav_msgs::Odometry>("global_odometry", 100);

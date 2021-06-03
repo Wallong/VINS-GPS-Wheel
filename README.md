@@ -2,9 +2,11 @@
 ## Visual-Inertial Odometry Tightly Coupled with Wheel Encoder and GPS
 This repo couples wheel encoder data and GPS data on the basis of [VINS_Mono](https://github.com/HKUST-Aerial-Robotics/VINS-Mono). The project is tested on [KAIST](https://irap.kaist.ac.kr/dataset/) dataset and is suitable for automatic driving scenario.
 
+<img src="https://github.com/Wallong/VINS-GPS-Wheel/blob/master/support_files/image/kaist.png" width = 80% height = 80% div align=middle />
+
 The wheel encoder data is tightly coupled, referred to the paper[[1]](https://ieeexplore.ieee.org/abstract/document/8967607). GPS fusion adopts loose coupling, and the fusion method is consistent with [VINS-Fusion](https://github.com/HKUST-Aerial-Robotics/VINS-Fusion).
 
-Detailed derivations can be found in: https://blog.csdn.net/ewtewtewrt/article/details/
+Detailed derivations can be found in: https://blog.csdn.net/ewtewtewrt/article/details/117249295
 
 # Install
 ## 1. Prerequisites
@@ -37,7 +39,7 @@ Open four terminals, launch the vins_estimator, rviz and pubish the data file re
     roslaunch vins_estimator kaist.launch 
     rosrun multisensor_fusion multisensor_fusion_node (optional, for GPS)
     rosrun vins_estimator kaist_pub YOUR_PATH_TO_DATASET/KAIST/urban28/urban28-pankyo
-    roslaunch vins vins_rviz.launch
+    roslaunch vins_estimator vins_rviz.launch
 ```
 
 ## References

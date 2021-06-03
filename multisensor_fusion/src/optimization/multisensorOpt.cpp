@@ -90,8 +90,8 @@ void MultisensorOptimization::optimize()
             options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
             //options.minimizer_progress_to_stdout = true;
             //options.max_solver_time_in_seconds = SOLVER_TIME * 3;
-            options.max_num_iterations = 20;
-            options.max_solver_time_in_seconds = 0.3;
+            options.max_num_iterations = 5;
+            options.max_solver_time_in_seconds = 0.15;
             ceres::Solver::Summary summary;
             ceres::LossFunction *lossFunction;
             lossFunction = new ceres::HuberLoss(1.0);
@@ -222,7 +222,7 @@ void MultisensorOptimization::optimize()
             	    WGPS_T_WVIO = WGPS_T_body * WVIO_T_body.inverse();
             	}
             }
-            updateGlobalPath();
+            // updateGlobalPath();
             mPoseMap.unlock();
         }
         // std::chrono::milliseconds dura(1000);

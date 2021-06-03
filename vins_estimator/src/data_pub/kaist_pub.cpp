@@ -19,8 +19,7 @@ using namespace cv;
 using namespace Eigen;
 
 const int nDelayTimes = 2;
-string sData_path = "/home/dataset/EuRoC/MH-05/mav0/";
-string sConfig_path = "../config/";
+string sData_path = "/home/wallong/dataset/urban28/urban28-pankyo";
 
 bool LoadSensorData(string& sensor_data_file, unordered_map<string, string>* time_data_map)
 {
@@ -46,14 +45,13 @@ bool LoadSensorData(string& sensor_data_file, unordered_map<string, string>* tim
 
 int main(int argc, char *argv[])
 {
-    if(argc != 3)
+    if(argc != 2)
 	{
-		cerr << "./run_euroc PATH_TO_FOLDER/MH-05/mav0 PATH_TO_CONFIG/config \n" 
-			<< "For example: ./run_euroc /home/stevencui/dataset/EuRoC/MH-05/mav0/ ../config/"<< endl;
+		cerr << "./kaist_pub PATH_TO_FOLDER/YOUR_PATH_TO_DATASET/KAIST/urban28/urban28-pankyo \n" 
+			<< "For example: ./kaist_pub /home/wallong/dataset/urban28/urban28-pankyo"<< endl;
 		return -1;
 	}
     sData_path = argv[1];
-    sConfig_path = argv[2];
 
     ros::init(argc, argv, "KAIST_pub");
     ros::NodeHandle nh("~");
@@ -62,10 +60,10 @@ int main(int argc, char *argv[])
     ros::Publisher encoder_publisher;
     ros::Publisher gps_publisher;
 
-    imu_publisher = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 10, true);
-    img_publisher = nh.advertise<sensor_msgs::Image>("/stereo/left/image_raw", 5, true);
-    encoder_publisher = nh.advertise<custom_msgs::Encoder>("/encoder/data_raw", 10, true);
-    gps_publisher = nh.advertise<sensor_msgs::NavSatFix>("/gps/data_raw", 10, true);
+    imu_publisher = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 100, true);
+    img_publisher = nh.advertise<sensor_msgs::Image>("/stereo/left/image_raw", 100, true);
+    encoder_publisher = nh.advertise<custom_msgs::Encoder>("/encoder/data_raw", 100, true);
+    gps_publisher = nh.advertise<sensor_msgs::NavSatFix>("/gps/data_raw", 100, true);
 
     unordered_map<string, string> time_encoder_map;
     string encoder_data_path = sData_path + "/sensor_data/encoder.csv";
@@ -188,7 +186,7 @@ int main(int argc, char *argv[])
             gps_msg.altitude = std::stod(line_data_vec[3]);
             for (int i = 0; i < 9; i++)
             {
-                gps_msg.position_covariance[i] = std::stod(line_data_vec[i + 4]);
+                gps_msg.position_covariance[i] = std::stod(line_data_vec[i + 4]) / 100;
             }
             gps_publisher.publish(gps_msg);
         }
