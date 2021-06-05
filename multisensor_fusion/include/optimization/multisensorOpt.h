@@ -24,6 +24,7 @@ public:
     void inputOdom(double t, Eigen::Vector3d odomP, Eigen::Quaterniond odomQ);
     void getGlobalOdom(Eigen::Vector3d &odomP, Eigen::Quaterniond &odomQ);
     nav_msgs::Path globalPath;
+    nav_msgs::Path gpsPath;
 
 private:
     void GPS2XYZ(double latitude, double longtitude, double altitude, double* xyz);
@@ -43,4 +44,6 @@ private:
     Eigen::Quaterniond lastQ;
     std::thread threadOpt;
 
+    int windowLength;
+    Eigen::Vector3d lastLocalP;
 };

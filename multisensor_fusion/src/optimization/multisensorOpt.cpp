@@ -10,6 +10,9 @@ MultisensorOptimization::MultisensorOptimization()
     newGPS = false;
     WGPS_T_WVIO = Eigen::Matrix4d::Identity();
     threadOpt = std::thread(&MultisensorOptimization::optimize, this);
+    windowLength = 50;
+
+    lastLocalP = Eigen::Vector3d::Zero();
 }
 
 MultisensorOptimization::~MultisensorOptimization()
@@ -32,30 +35,31 @@ void MultisensorOptimization::inputOdom(double t, Eigen::Vector3d odomP, Eigen::
 	mPoseMap.lock();
     vector<double> localPose{odomP.x(), odomP.y(), odomP.z(), 
     					     odomQ.w(), odomQ.x(), odomQ.y(), odomQ.z()};
-    localPoseMap[t] = localPose;
+    
+    // 位移差1厘米，才运动
+    if ((odomP - lastLocalP).norm() > 0.01)
+    {
+        localPoseMap[t] = localPose;
 
+        while (localPoseMap.size() > windowLength)
+        {
+            localPoseMap.erase(std::begin(localPoseMap));
+        }
 
-    Eigen::Quaterniond globalQ;
-    globalQ = WGPS_T_WVIO.block<3, 3>(0, 0) * odomQ;
-    Eigen::Vector3d globalP = WGPS_T_WVIO.block<3, 3>(0, 0) * odomP + WGPS_T_WVIO.block<3, 1>(0, 3);
-    vector<double> globalPose{globalP.x(), globalP.y(), globalP.z(),
-                              globalQ.w(), globalQ.x(), globalQ.y(), globalQ.z()};
-    globalPoseMap[t] = globalPose;
-    lastP = globalP;
-    lastQ = globalQ;
+        Eigen::Quaterniond globalQ;
+        globalQ = WGPS_T_WVIO.block<3, 3>(0, 0) * odomQ;
+        Eigen::Vector3d globalP = WGPS_T_WVIO.block<3, 3>(0, 0) * odomP + WGPS_T_WVIO.block<3, 1>(0, 3);
+        vector<double> globalPose{globalP.x(), globalP.y(), globalP.z(),
+                                globalQ.w(), globalQ.x(), globalQ.y(), globalQ.z()};
+        globalPoseMap[t] = globalPose;
 
-    geometry_msgs::PoseStamped pose_stamped;
-    pose_stamped.header.stamp = ros::Time(t);
-    pose_stamped.header.frame_id = "world";
-    pose_stamped.pose.position.x = lastP.x();
-    pose_stamped.pose.position.y = lastP.y();
-    pose_stamped.pose.position.z = lastP.z();
-    pose_stamped.pose.orientation.x = lastQ.x();
-    pose_stamped.pose.orientation.y = lastQ.y();
-    pose_stamped.pose.orientation.z = lastQ.z();
-    pose_stamped.pose.orientation.w = lastQ.w();
-    globalPath.header = pose_stamped.header;
-    globalPath.poses.push_back(pose_stamped);
+        while (globalPoseMap.size() > windowLength)
+        {
+            globalPoseMap.erase(std::begin(globalPoseMap));
+        }
+
+        lastLocalP = odomP;
+    }
 
     mPoseMap.unlock();
 }
@@ -71,8 +75,22 @@ void MultisensorOptimization::inputGPS(double t, double latitude, double longitu
     double xyz[3];
     GPS2XYZ(latitude, longitude, altitude, xyz);
     std::vector<double> tmp{xyz[0], xyz[1], xyz[2], latCov, lonCov, altCov};
-    printf("new gps: t: %f x: %f y: %f z:%f \n", t, tmp[0], tmp[1], tmp[2]);
+    // printf("new gps: t: %f x: %f y: %f z:%f \n", t, tmp[0], tmp[1], tmp[2]);
     GPSPositionMap[t] = tmp;
+
+    geometry_msgs::PoseStamped poseStamped;
+    poseStamped.header.stamp = ros::Time(t);
+    poseStamped.header.frame_id = "world";
+    poseStamped.pose.position.x = tmp[0];
+    poseStamped.pose.position.y = tmp[1];
+    poseStamped.pose.position.z = tmp[2];
+    poseStamped.pose.orientation.w = 1;
+    poseStamped.pose.orientation.x = 0;
+    poseStamped.pose.orientation.y = 0;
+    poseStamped.pose.orientation.z = 0;
+    gpsPath.header = poseStamped.header;
+    gpsPath.poses.push_back(poseStamped);
+    
     newGPS = true;
 }
 
@@ -83,7 +101,7 @@ void MultisensorOptimization::optimize()
         if (newGPS)
         {
             newGPS = false;
-            printf("Multisensor optimization\n");
+            // printf("Multisensor optimization\n");
 
             ceres::Problem problem;
             ceres::Solver::Options options;
@@ -91,7 +109,7 @@ void MultisensorOptimization::optimize()
             //options.minimizer_progress_to_stdout = true;
             //options.max_solver_time_in_seconds = SOLVER_TIME * 3;
             options.max_num_iterations = 5;
-            options.max_solver_time_in_seconds = 0.15;
+            // options.max_solver_time_in_seconds = 0.15;
             ceres::Solver::Summary summary;
             ceres::LossFunction *lossFunction;
             lossFunction = new ceres::HuberLoss(1.0);
@@ -199,7 +217,7 @@ void MultisensorOptimization::optimize()
 
             // solve problem
             ceres::Solve(options, &problem, &summary);
-            std::cout << summary.BriefReport() << std::endl;
+            // std::cout << summary.BriefReport() << std::endl;
 
             // update global pose
             iter = globalPoseMap.begin();
@@ -222,7 +240,7 @@ void MultisensorOptimization::optimize()
             	    WGPS_T_WVIO = WGPS_T_body * WVIO_T_body.inverse();
             	}
             }
-            // updateGlobalPath();
+            updateGlobalPath();
             mPoseMap.unlock();
         }
         // std::chrono::milliseconds dura(1000);
@@ -233,8 +251,22 @@ void MultisensorOptimization::optimize()
 
 void MultisensorOptimization::updateGlobalPath()
 {
-    globalPath.poses.clear();
-    for (auto iter = globalPoseMap.begin(); iter != globalPoseMap.end(); iter++)
+    // global_path.poses.clear();
+    if (globalPath.poses.size() > windowLength - 1)
+    {
+        int i = windowLength - 1;
+        while (i > 0)
+        {
+            globalPath.poses.pop_back();
+            i--;
+        }
+    }
+    else
+    {
+        globalPath.poses.clear();
+    }
+    map<double, vector<double>>::iterator iter;
+    for (iter = globalPoseMap.begin(); iter != globalPoseMap.end(); iter++)
     {
         geometry_msgs::PoseStamped poseStamped;
         poseStamped.header.stamp = ros::Time(iter->first);
@@ -246,7 +278,18 @@ void MultisensorOptimization::updateGlobalPath()
         poseStamped.pose.orientation.x = iter->second[4];
         poseStamped.pose.orientation.y = iter->second[5];
         poseStamped.pose.orientation.z = iter->second[6];
+        globalPath.header = poseStamped.header;
         globalPath.poses.push_back(poseStamped);
     }
+
+    // 使用优化后的最新位姿作为global odometry
+    iter--;
+    lastP.x() = iter->second[0];
+    lastP.y() = iter->second[1];
+    lastP.z() = iter->second[2];
+    lastQ.w() = iter->second[3];
+    lastQ.x() = iter->second[4];
+    lastQ.y() = iter->second[5];
+    lastQ.z() = iter->second[6];
 }
 

@@ -17,8 +17,9 @@ void GPS_callback(const sensor_msgs::NavSatFixConstPtr &GPS_msg);
 void vio_callback(const nav_msgs::OdometryConstPtr &pose_msg);
 
 MultisensorOptimization multisensorOptimization;
-ros::Publisher globalOdomPub, globalPathPub;
+ros::Publisher globalOdomPub, globalPathPub, gpsPathPub;
 nav_msgs::Path* globalPath;
+nav_msgs::Path* gpsPath;
 std::queue<sensor_msgs::NavSatFixConstPtr> gpsQueue;
 std::mutex m_buf;
 
@@ -30,12 +31,14 @@ int main(int argc, char *argv[])
     ros::NodeHandle nh("~");
 
     globalPath = &multisensorOptimization.globalPath;
+    gpsPath = &multisensorOptimization.gpsPath;
 
     ros::Subscriber sub_GPS = nh.subscribe("/gps/data_raw", 100, GPS_callback);
     ros::Subscriber sub_vio = nh.subscribe("/vins_estimator/odometry", 100, vio_callback);
 
     globalPathPub = nh.advertise<nav_msgs::Path>("global_path", 100);
     globalOdomPub = nh.advertise<nav_msgs::Odometry>("global_odometry", 100);
+    gpsPathPub = nh.advertise<nav_msgs::Path>("gps_path", 100);
 
     ros::spin();
     return 0;
@@ -43,7 +46,6 @@ int main(int argc, char *argv[])
 
 void GPS_callback(const sensor_msgs::NavSatFixConstPtr &GPS_msg)
 {
-    ROS_INFO("GPS callback.");
     m_buf.lock();
     gpsQueue.push(GPS_msg);
     m_buf.unlock();
@@ -51,7 +53,6 @@ void GPS_callback(const sensor_msgs::NavSatFixConstPtr &GPS_msg)
 
 void vio_callback(const nav_msgs::OdometryConstPtr &pose_msg)
 {
-    ROS_INFO("VIO callback.");
     double t = pose_msg->header.stamp.toSec();
     last_vio_t = t;
 
@@ -72,7 +73,7 @@ void vio_callback(const nav_msgs::OdometryConstPtr &pose_msg)
     {
         sensor_msgs::NavSatFixConstPtr GPS_msg = gpsQueue.front();
         double gps_t = GPS_msg->header.stamp.toSec();
-        ROS_INFO("last_vio_t: %f, gps_t: %f, Time deviation: %f", last_vio_t, gps_t, last_vio_t - gps_t);
+        // ROS_INFO("last_vio_t: %f, gps_t: %f, Time deviation: %f", last_vio_t, gps_t, last_vio_t - gps_t);
 
         // Different from VINS-Fusion, which has synchronized timestamps at data-publish stage.
         if (gps_t >= t - 0.1 && gps_t <= t + 0.1)
@@ -117,6 +118,7 @@ void vio_callback(const nav_msgs::OdometryConstPtr &pose_msg)
     odometry.pose.pose.orientation.z = global_q.z();
     globalOdomPub.publish(odometry);
     globalPathPub.publish(*globalPath);
+    gpsPathPub.publish(*gpsPath);
     
     // write result to csv file
     std::ofstream foutC("/home/xiaoqiang/output/vio_global.csv", std::ios::app);

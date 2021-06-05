@@ -230,8 +230,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     ImageFrame imageframe(image, header.stamp.toSec());
     imageframe.pre_integration = tmp_pre_integration;
     all_image_frame.insert(make_pair(header.stamp.toSec(), imageframe));
-    tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
-    // tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count], enc_v_0};
+    // tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
+    tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count], enc_v_0};
 
     // 这里如果没有外参数，先估计一个外参数，在这里我们始终提供外参数
     if(ESTIMATE_EXTRINSIC == 2)
@@ -501,26 +501,8 @@ bool Estimator::visualInitialAlign()
     {
         pre_integrations[i]->repropagate(Vector3d::Zero(), Bgs[i]);
     }
-    /**encoder*/
-    // 根据轮速计的预积分求s
-    // double sum_s = 0;
-    // for (int i = frame_count; i >= 1; i--)
-    // {
-    //     double s = 0;
-    //     Eigen::Vector3d delta_eta = all_image_frame[Headers[i].stamp.toSec()].pre_integration->delta_eta;
-    //     ROS_INFO_STREAM("Delta eta = " << delta_eta.transpose());
-    //     Eigen::Quaterniond delta_q = all_image_frame[Headers[i].stamp.toSec()].pre_integration->delta_q;
-    //     ROS_INFO_STREAM("Delta q = " << delta_q.coeffs().transpose());
-    //     Eigen::Vector3d tmp_b = delta_eta + TIO - delta_q * TIO + Rs[i] * TIC[0] - Rs[i-1] * TIC[0];
-    //     ROS_INFO_STREAM("Delta tmp_b = " << tmp_b.transpose());
-    //     Eigen::Vector3d tmp_A = Ps[i] - Ps[i-1];
-    //     ROS_INFO_STREAM("Delta tmp_A = " << tmp_A.transpose());
-    //     s = tmp_b.x() / tmp_A.x(); // 考虑车的特性
-    //     sum_s += s; 
-    // }
-    // double s = sum_s / frame_count;
+
     ROS_INFO("Real scale = %f", s);
-    /*encoder**/
 
     for (int i = frame_count; i >= 0; i--)
         Ps[i] = s * Ps[i] - Rs[i] * TIC[0] - (s * Ps[0] - Rs[0] * TIC[0]);
@@ -643,6 +625,16 @@ void Estimator::vector2double()
         para_Ex_Pose[i][6] = q.w();
     }
 
+    // Encoder
+    para_Ex_Pose_enc[0] = tio.x();
+    para_Ex_Pose_enc[1] = tio.y();
+    para_Ex_Pose_enc[2] = tio.z();
+    Quaterniond qio(rio);
+    para_Ex_Pose_enc[3] = qio.x();
+    para_Ex_Pose_enc[4] = qio.y();
+    para_Ex_Pose_enc[5] = qio.z();
+    para_Ex_Pose_enc[6] = qio.w();
+
     VectorXd dep = f_manager.getDepthVector();
     for (int i = 0; i < f_manager.getFeatureCount(); i++)
         para_Feature[i][0] = dep(i);
@@ -709,6 +701,16 @@ void Estimator::double2vector()
                              para_Ex_Pose[i][4],
                              para_Ex_Pose[i][5]).toRotationMatrix();
     }
+
+    tio = Vector3d(para_Ex_Pose_enc[0],
+                   para_Ex_Pose_enc[1],
+                   para_Ex_Pose_enc[2]);
+    rio = Quaterniond(para_Ex_Pose_enc[6],
+                      para_Ex_Pose_enc[3],
+                      para_Ex_Pose_enc[4],
+                      para_Ex_Pose_enc[5]).toRotationMatrix();
+    TIO = tio;
+    RIO = rio;
 
     VectorXd dep = f_manager.getDepthVector();
     for (int i = 0; i < f_manager.getFeatureCount(); i++)
@@ -814,13 +816,18 @@ void Estimator::optimization()
         else
             ROS_DEBUG("estimate extinsic param");
     }
-    /**encoder*/ 
-    // if (ENCODER)
-    // {
-    //     ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
-    //     problem.AddParameterBlock(para_Ex_Pose_enc[0], SIZE_POSE, local_parameterization);
-    // }
-    /*encoder**/ 
+
+    // Encoder 
+    if (ENCODER)
+    {
+        ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+        problem.AddParameterBlock(para_Ex_Pose_enc, SIZE_POSE, local_parameterization);
+        if (!ESTIMATE_EXTRINSIC)
+        {
+            problem.SetParameterBlockConstant(para_Ex_Pose_enc);
+        }
+    }
+    
     if (ESTIMATE_TD)
     {
         problem.AddParameterBlock(para_Td[0], 1);
@@ -846,10 +853,10 @@ void Estimator::optimization()
             continue;
         // IMU因子的函数对象
         // j新关键帧
-        IMUFactor* imu_factor = new IMUFactor(pre_integrations[j]);
-        problem.AddResidualBlock(imu_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);
-        // IMUEncoderFactor* imu_encoder_factor = new IMUEncoderFactor(pre_integrations[j]);
-        // problem.AddResidualBlock(imu_encoder_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);
+        // IMUFactor* imu_factor = new IMUFactor(pre_integrations[j]);
+        // problem.AddResidualBlock(imu_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);
+        IMUEncoderFactor* imu_encoder_factor = new IMUEncoderFactor(pre_integrations[j]);
+        problem.AddResidualBlock(imu_encoder_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j], para_Ex_Pose_enc);
     }
     int f_m_cnt = 0;
     int feature_index = -1;
@@ -984,12 +991,12 @@ void Estimator::optimization()
         {
             if (pre_integrations[1]->sum_dt < 10.0)
             {
-                IMUFactor* imu_factor = new IMUFactor(pre_integrations[1]);
-                ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(imu_factor, NULL,
-                                                                           vector<double *>{para_Pose[0], para_SpeedBias[0], para_Pose[1], para_SpeedBias[1]},
-                                                                           vector<int>{0, 1});
-                // IMUEncoderFactor* imu_encoder_factor = new IMUEncoderFactor(pre_integrations[1]);
-                // ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(imu_encoder_factor, NULL, vector<double *>{para_Pose[0], para_SpeedBias[0], para_Pose[1], para_SpeedBias[1]}, vector<int>{0, 1});
+                // IMUFactor* imu_factor = new IMUFactor(pre_integrations[1]);
+                // ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(imu_factor, NULL,
+                //                                                            vector<double *>{para_Pose[0], para_SpeedBias[0], para_Pose[1], para_SpeedBias[1]},
+                //                                                            vector<int>{0, 1});
+                IMUEncoderFactor* imu_encoder_factor = new IMUEncoderFactor(pre_integrations[1]);
+                ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(imu_encoder_factor, NULL, vector<double *>{para_Pose[0], para_SpeedBias[0], para_Pose[1], para_SpeedBias[1], para_Ex_Pose_enc}, vector<int>{0, 1});
                 marginalization_info->addResidualBlockInfo(residual_block_info);
             }
         }
@@ -1055,6 +1062,7 @@ void Estimator::optimization()
         }
         for (int i = 0; i < NUM_OF_CAM; i++)
             addr_shift[reinterpret_cast<long>(para_Ex_Pose[i])] = para_Ex_Pose[i];
+        addr_shift[reinterpret_cast<long>(para_Ex_Pose_enc)] = para_Ex_Pose_enc; // encoder
         if (ESTIMATE_TD)
         {
             addr_shift[reinterpret_cast<long>(para_Td[0])] = para_Td[0];
@@ -1121,6 +1129,7 @@ void Estimator::optimization()
             }
             for (int i = 0; i < NUM_OF_CAM; i++)
                 addr_shift[reinterpret_cast<long>(para_Ex_Pose[i])] = para_Ex_Pose[i];
+            addr_shift[reinterpret_cast<long>(para_Ex_Pose_enc)] = para_Ex_Pose_enc; // encoder
             if (ESTIMATE_TD)
             {
                 addr_shift[reinterpret_cast<long>(para_Td[0])] = para_Td[0];
@@ -1174,8 +1183,8 @@ void Estimator::slideWindow()
             Bgs[WINDOW_SIZE] = Bgs[WINDOW_SIZE - 1];
 
             delete pre_integrations[WINDOW_SIZE];
-            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
-            // pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], enc_v_0};
+            // pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
+            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], enc_v_0};
 
             dt_buf[WINDOW_SIZE].clear();
             linear_acceleration_buf[WINDOW_SIZE].clear();
@@ -1214,8 +1223,8 @@ void Estimator::slideWindow()
                 Vector3d tmp_angular_velocity = angular_velocity_buf[frame_count][i];
                 Vector3d tmp_encoder_velocity = encoder_velocity_buf[frame_count][i];
 
-                pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity);
-                // pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity, tmp_encoder_velocity);
+                // pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity);
+                pre_integrations[frame_count - 1]->push_back(tmp_dt, tmp_linear_acceleration, tmp_angular_velocity, tmp_encoder_velocity);
 
                 dt_buf[frame_count - 1].push_back(tmp_dt);
                 linear_acceleration_buf[frame_count - 1].push_back(tmp_linear_acceleration);
@@ -1231,8 +1240,8 @@ void Estimator::slideWindow()
             Bgs[frame_count - 1] = Bgs[frame_count];
 
             delete pre_integrations[WINDOW_SIZE];
-            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
-            // pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], enc_v_0};
+            // pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE]};
+            pre_integrations[WINDOW_SIZE] = new IntegrationBase{acc_0, gyr_0, Bas[WINDOW_SIZE], Bgs[WINDOW_SIZE], enc_v_0};
 
             dt_buf[WINDOW_SIZE].clear();
             linear_acceleration_buf[WINDOW_SIZE].clear();

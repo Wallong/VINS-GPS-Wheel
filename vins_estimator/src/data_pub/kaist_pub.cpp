@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
             gps_msg.altitude = std::stod(line_data_vec[3]);
             for (int i = 0; i < 9; i++)
             {
-                gps_msg.position_covariance[i] = std::stod(line_data_vec[i + 4]) / 100;
+                gps_msg.position_covariance[i] = std::stod(line_data_vec[i + 4]) / 50;
             }
             gps_publisher.publish(gps_msg);
         }

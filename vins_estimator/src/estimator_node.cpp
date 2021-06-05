@@ -43,7 +43,7 @@ Eigen::Vector3d gyr_0;
 bool init_feature = 0;
 bool init_imu = 1;
 double last_imu_t = 0;
-double last_encoder_t = 0; // wallong
+double last_encoder_t = 0; 
 
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 {
@@ -424,7 +424,7 @@ void process()
                     // estimator.processIMU(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
                     // estimator.processIMU(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), Vector3d(vx, vy, vz));
                     estimator.processIMUEncoder(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz), Vector3d(vx, vy, vz));
-                    printf("dimu: dt:%f a: %f %f %f w: %f %f %f v: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz, vx, vy, vz);
+                    // printf("dimu: dt:%f a: %f %f %f w: %f %f %f v: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz, vx, vy, vz);
                 }
             }
             encoder_velocities.clear(); // 清空内存
@@ -493,7 +493,7 @@ void process()
             pubKeyframe(estimator);
             if (relo_msg != NULL)
                 pubRelocalization(estimator);
-            ROS_INFO("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
+            // ROS_INFO("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
         }
 
         m_estimator.unlock();
