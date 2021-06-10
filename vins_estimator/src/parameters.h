@@ -24,8 +24,8 @@ extern double ENC_N; // 轮速计噪声方差
 
 extern std::vector<Eigen::Matrix3d> RIC;
 extern std::vector<Eigen::Vector3d> TIC;
-extern Eigen::Matrix3d RIE; // 轮速计到IMU外参R
-extern Eigen::Vector3d TIE; // 轮速计到IMU外参T
+extern Eigen::Matrix3d RIO; // 轮速计到IMU外参R
+extern Eigen::Vector3d TIO; // 轮速计到IMU外参T
 extern Eigen::Vector3d G;
 
 extern double BIAS_ACC_THRESHOLD;
