@@ -129,13 +129,13 @@ getMeasurements()
         }
 
         // wallong
-        if (!(encoder_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec()))
+        if (!(encoder_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             ROS_WARN("wait for encoder.");
             sum_of_wait++;
             return measurements;
         }
-        if (!(encoder_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec()))
+        if (!(encoder_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             ROS_WARN("throw img, only should happen at the beginning.");
             feature_buf.pop();

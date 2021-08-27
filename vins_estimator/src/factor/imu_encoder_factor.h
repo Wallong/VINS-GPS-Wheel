@@ -163,7 +163,7 @@ class IMUEncoderFactor : public ceres::SizedCostFunction<18, 7, 9, 7, 9>
                 jacobian_pose_j.block<3, 3>(3, 3) = Utility::Qleft(corrected_delta_q.inverse() * Qi.inverse() * Qj).bottomRightCorner<3, 3>();
 #endif
                     jacobian_pose_j.block<3, 3>(9, 0) = Qi.inverse().toRotationMatrix();
-                    jacobian_pose_j.block<3, 3>(9, 3) = -Qi.inverse().toRotationMatrix() * Utility::skewSymmetric(Qj * TIO);
+                    jacobian_pose_j.block<3, 3>(9, 3) = -Qi.inverse().toRotationMatrix() * Qj * Utility::skewSymmetric(TIO);
 
                 jacobian_pose_j = sqrt_info * jacobian_pose_j;
 
